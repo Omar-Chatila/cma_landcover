@@ -1,11 +1,26 @@
-name: moveapps-python-sdk
+name: cma_landcover
 channels:
   - conda-forge
 dependencies:
   - python=3.11
+  - pip
+  - pluggy
+
   - pandas
   - geopandas
   - movingpandas
-  - pluggy
+  - rasterio
+  - rioxarray
+  - pyproj
+  - shapely
+  - gdal
+
+  - qt-main
+  - pyqt6
+  - compilers
+  - cmake
   - python-dotenv
   - deprecated
+
+  - pip:
+    - "git+https://github.com/ls11ae/random-walks-python.git@state-walks#submodules=true"

@@ -3,10 +3,10 @@ from sdk.moveapps_io import MoveAppsIo
 from movingpandas import TrajectoryCollection
 import logging
 import matplotlib.pyplot as plt
+import tempfile
 
-# showcase for importing functions from another .py file (in this case from "./app/getGeoDataFrame.py")
-from app.getGeoDataFrame import get_GDF
-
+from random_walk_package import AnimalMovementProcessor
+from random_walk_package import apply_moveapps_id_dtype_patch, debug_patch_state
 
 class App(object):
 
@@ -15,42 +15,16 @@ class App(object):
 
     @hook_impl
     def execute(self, data: TrajectoryCollection, config: dict) -> TrajectoryCollection:
-
-        logging.info(f'Welcome to the {config}')
-
-        """Your app code goes here"""
-
-        # showcase injecting App settings (parameter `year`)
-        data_gdf = get_GDF(data)  # translate the TrajectoryCollection to a GeoDataFrame
-        logging.info(f'Subsetting data for {config["year"]}')
-        # subset the data to only contain the specified year
-        if config["year"] in data_gdf.index.year:
-            result = data_gdf[data_gdf.index.year == config["year"]]
-        else:
-            result = None
-
-        # showcase creating an artifact
-        if result is not None:
-            result.plot(column=data.get_traj_id_col(), alpha=0.5)
-            plot_file = self.moveapps_io.create_artifacts_file("plot.png")
-            plt.savefig(plot_file)
-            logging.info(f'saved plot to {plot_file}')
-        else:
-            logging.warning("Nothing to plot")
-
-        # showcase accessing auxiliary files
-        auxiliary_file_a = MoveAppsIo.get_auxiliary_file_path("auxiliary-file-a")
-        with open(auxiliary_file_a, 'r') as f:
-            logging.info(f.read())
-
-        # Translate the result back to a TrajectoryCollection
-        if result is not None:
-            result = TrajectoryCollection(
-                result,
-                traj_id_col=data.get_traj_id_col(),
-                t=data.to_point_gdf().index.name,
-                crs=data.get_crs()
-            )
-
-        # return the resulting data for next Apps in the Workflow
-        return result
+        apply_moveapps_id_dtype_patch()
+        debug_patch_state()
+        with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
+            traj_col_copy = data.to_point_gdf().copy()
+            proc = AnimalMovementProcessor(data=data)
+            proc.create_landcover_data_txt(False, 1000, tmp_dir)
+            supp_gdf = proc.add_features(data.to_point_gdf())
+            traj_col_copy["terrain"] = supp_gdf["terrain"].values
+            result = TrajectoryCollection(traj_col_copy,
+                                                traj_id_col=data.get_traj_id_col(),
+                                                t=data.t,
+                                                crs=data.get_crs())
+            return result
