@@ -1,12 +1,11 @@
 from sdk.moveapps_spec import hook_impl
-from sdk.moveapps_io import MoveAppsIo
 from movingpandas import TrajectoryCollection
-import logging
-import matplotlib.pyplot as plt
+from pathlib import Path
 import tempfile
+from zipfile import ZIP_DEFLATED, ZipFile
 
-from random_walk_package import AnimalMovementProcessor
-from random_walk_package import apply_moveapps_id_dtype_patch, debug_patch_state
+from environmentcma import annotate_study_pickle, RangeType
+
 
 class App(object):
 
@@ -15,16 +14,33 @@ class App(object):
 
     @hook_impl
     def execute(self, data: TrajectoryCollection, config: dict) -> TrajectoryCollection:
-        apply_moveapps_id_dtype_patch()
-        debug_patch_state()
+        range_type = RangeType(config["range_type"])
+        add_utm = True if config["addUtm"] == "true" else False
         with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
-            traj_col_copy = data.to_point_gdf().copy()
-            proc = AnimalMovementProcessor(data=data)
-            proc.create_landcover_data_txt(False, 1000, tmp_dir)
-            supp_gdf = proc.add_features(data.to_point_gdf())
-            traj_col_copy["terrain"] = supp_gdf["terrain"].values
-            result = TrajectoryCollection(traj_col_copy,
-                                                traj_id_col=data.get_traj_id_col(),
-                                                t=data.t,
-                                                crs=data.get_crs())
-            return result
+            annotated_tcol = annotate_study_pickle(
+                trajectories=data,
+                output_directory=tmp_dir,
+                range_type=range_type,
+                resolution=1000,
+                add_utm=add_utm,
+            )
+
+            if config["keepGeoTiffs"] == "true":
+                output_directory = Path(tmp_dir)
+                artifact_path = Path(
+                    self.moveapps_io.create_artifacts_file("tiffs.zip")
+                )
+                artifact_path.parent.mkdir(parents=True, exist_ok=True)
+                geotiffs = sorted(
+                    path
+                    for path in output_directory.rglob("*")
+                    if path.is_file() and path.suffix.lower() in {".tif", ".tiff"}
+                )
+                with ZipFile(artifact_path, "w", compression=ZIP_DEFLATED) as archive:
+                    for geotiff in geotiffs:
+                        archive.write(
+                            geotiff,
+                            arcname=geotiff.relative_to(output_directory),
+                        )
+
+            return annotated_tcol

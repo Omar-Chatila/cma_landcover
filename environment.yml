@@ -23,4 +23,4 @@ dependencies:
   - deprecated
 
   - pip:
-    - "git+https://github.com/ls11ae/random-walks-python.git@state-walks#submodules=true"
+    - "git+https://github.com/Omar-Chatila/cma_environment.git"

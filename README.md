@@ -1,77 +1,138 @@
-# Name of App *(Give your app a short and informative title. Please adhere to our convention of Title Case without hyphens (e.g. My New App))*
+# Environmental Land Cover Annotation
 
-MoveApps
+MoveApps App for adding environmental land-cover information to animal tracks.
 
-Github repository: *github.com/yourAccount/Name-of-App* *(provide the link to the repository where the code of the App can be found)*
+GitHub repository: [Omar-Chatila/cma_landcover](https://github.com/Omar-Chatila/cma_landcover)
 
 ## Description
-*Enter here the short description of the App that might also be used when filling out the description during App submission to MoveApps. This text is directly presented to Users that look through the list of Apps when compiling Workflows.*
 
-## Documentation
-*Enter here a detailed description of your App. What is it intended to be used for. Which steps of analyses are performed and how. Please be explicit about any detail that is important for use and understanding of the App and its outcomes. You might also refer to the sections below.*
+This App annotates every location in a
+`movingpandas.TrajectoryCollection` with a terrain code and a readable terrain
+name. Processing is independent for each animal, so each track gets its own
+environment raster, grid, and projected coordinate reference system (CRS).
 
-### Application scope
-#### Generality of App usability
-*State here if the App was developed for a specific species, taxon or taxonomic group, or to answer a specific question. How might it influence the scope and utility of the App. This information will help the user to understand why the App might be producing no or odd results.*
+The App supports any taxon with point locations and a defined input CRS. It
+offers two deliberately different data modes:
 
-*Examples:*
+- **LONG_RANGE** is the safe default for bird, marine, migratory, or otherwise
+  wide-ranging studies, especially when tracks may cross UTM zones. It uses
+  packaged [Natural Earth 1:10m land polygons](https://www.naturalearthdata.com/downloads/10m-physical-vectors/10m-land/)
+  and annotates only `Land` or `Water`. It does not contact a land-cover API.
+- **LOCAL** provides detailed land-cover classes from ESA WorldCover. Select it
+  only when the study is known to be spatially local. It requires network access
+  to the Microsoft Planetary Computer during the App run.
 
-This App was developed using data of birds. 
+If the extent is uncertain, use **LONG_RANGE**.
 
-This App was developed using data of red deer. 
+## Input and output
 
-This App was developed for any taxonomic group. 
+The input and returned output are both a
+`movingpandas.TrajectoryCollection`. Each input trajectory must contain valid
+point geometries, timestamps, animal identifiers, and a defined CRS. The App
+preserves the input trajectories and columns and adds:
 
-This App was developed to identify kill sites, but can probably be used to identify any kind of location clusters like nests, dens or drinking holes.
+- `terrain`: numeric terrain code;
+- `terrain_name`: readable class name;
+- `grid_x` and `grid_y`: the location's cell in the per-animal discrete grid;
+- `utm_x`, `utm_y`, and `utm_crs` when **Add UTM conversion** is enabled.
 
-#### Required data properties
-*State here the required and/or optimal data properties for this App to perform properly.*
+The UTM columns are useful only together: `utm_crs` identifies the CRS in which
+the row's `utm_x` and `utm_y` values are expressed.
 
-*Examples:*
+## Settings
 
-This App is only applicable to data that reflect range resident behavior. 
+### Study range type (`range_type`)
 
-The data should have a fix rate of at least 1 location per 30 minutes. 
+**LONG_RANGE** creates a binary land/water raster from the Natural Earth 1:10m
+land polygons bundled with `environmentcma`:
 
-The App should work for any kind of (location) data.
+| Code | Class |
+| ---: | --- |
+| 10 | Land |
+| 80 | Water |
 
-### Input type
-*Indicate which type of input data the App requires.*
+**LOCAL** obtains ESA WorldCover through the
+[Microsoft Planetary Computer](https://planetarycomputer.microsoft.com/dataset/esa-worldcover).
+WorldCover is a global 10 m product derived from Sentinel-1 and Sentinel-2 data.
+The App searches the public Planetary Computer STAC endpoint for collection
+`esa-worldcover` using each animal's bounding box, opens the matching item's
+`map` asset, and clips it to that area of interest.
 
-*Example*: `MovingPandas.TrajectoryCollection`
+The detailed classes are:
 
-### Output type
-*Indicate which type of output data the App produces to be passed on to subsequent Apps.*
+| Code | ESA WorldCover class |
+| ---: | --- |
+| 10 | Tree cover |
+| 20 | Shrubland |
+| 30 | Grassland |
+| 40 | Cropland |
+| 50 | Built-up |
+| 60 | Bare / sparse vegetation |
+| 70 | Snow and ice |
+| 80 | Permanent water bodies |
+| 90 | Herbaceous wetland |
+| 95 | Mangroves |
+| 100 | Moss and lichen |
 
-*Example:* `MovingPandas.TrajectoryCollection`
+ESA describes WorldCover 2020 and 2021 as freely accessible global 10 m maps
+with 11 classes; see the [ESA WorldCover project description](https://esa-worldcover.org/en/about/about).
+The Planetary Computer provides discovery metadata through its public STAC API
+and signed access to the raster asset stored on Azure. The downloaded imagery
+remains an ESA WorldCover product; Planetary Computer is the access platform.
 
-### Artefacts
-*If the App creates artefacts (e.g. csv, pdf, jpeg, shapefiles, etc), please list them here and describe each.*
+### Add UTM conversion (`addUtm`)
 
-*Example:* `rest_overview.csv`: csv-file with Table of all rest site properties
+When enabled, the App adds `utm_x`, `utm_y`, and `utm_crs`. For each animal it
+selects the WGS 84 UTM zone containing the spatial centre of that animal's
+track. All fixes belonging to that animal use the same UTM CRS, independently
+of every other animal.
 
-### Settings 
-*Please list and define all settings/parameters that the App requires to be set by the App user, if necessary including their unit. Please first state the Setting name the user encounters in the Settings menu defined in the appspecs.json, and between brackets the argument used in the Python code to be able to identify it quickly in the code if needed.*
+The intermediate GeoTIFF must be projected before the discrete metric grid is
+created and before locations are sampled. Both modes first create or clip a
+raster in geographic WGS 84 coordinates (EPSG:4326), then reproject it in place
+to the local WGS 84 UTM CRS. Northern-hemisphere zones use EPSG:326xx and
+southern-hemisphere zones use EPSG:327xx, where `xx` is the UTM zone. This makes
+the per-animal grid calculations operate in metres rather than degrees.
 
-*Example:* `Radius of resting site` (radius): Defined radius the animal has to stay in for a given duration of time for it to be considered resting site. Unit: `metres`.
+### Keep GeoTIFF files (`keepGeoTiffs`)
 
-### Changes in output data
-*Specify here how and if the App modifies the input data. Describe clearly what e.g. each additional column means.*
+When enabled, all per-animal GeoTIFFs are returned as one downloadable MoveApps
+artifact named `tiffs.zip`. The paths inside the archive identify their
+`landcover` subdirectory and animal-specific filenames. In **LOCAL** mode these
+are clipped ESA WorldCover rasters; in **LONG_RANGE** mode they are rasters
+generated from the packaged Natural Earth polygons. When disabled, rasters and
+discrete text grids are temporary processing files and are deleted after the
+App run.
 
-*Examples:*
+## Processing details
 
-The App adds to the input data the columns `Max_dist` and `Avg_dist`. They contain the maximum distance to the provided focal location and the average distance to it over all locations. 
+For each animal the App:
 
-The App filterers the input data as selected by the user. 
+1. transforms its extent to EPSG:4326 and adds a small spatial buffer;
+2. obtains detailed WorldCover data for **LOCAL**, or rasterizes packaged land
+   polygons for **LONG_RANGE**;
+3. reprojects the GeoTIFF to the UTM zone selected from the raster centre;
+4. creates a regular discrete grid with a maximum dimension of 1,000 cells;
+5. samples the projected raster at every fix and adds the annotation columns.
 
-The output data is the outcome of the model applied to the input data. 
+Natural Earth is a small-scale cartographic data set, so **LONG_RANGE** is
+appropriate for broad land/water context rather than fine coastline or small
+island analysis. ESA WorldCover is more detailed, but its class accuracy and
+reference year should be considered when interpreting results.
 
-The input data remains unchanged.
+## Most common errors
 
-### Most common errors
-*Please describe shortly what most common errors of the App can be, how they occur and best ways of solving them.*
+- **Missing CRS:** the App cannot transform or sample locations without a
+  defined input CRS. Assign the correct CRS before running it.
+- **LOCAL data cannot be fetched:** Planetary Computer access may be unavailable
+  or no WorldCover item may cover the supplied bounding box. Retry later, check
+  the coordinates, or use **LONG_RANGE** if detailed local classes are not
+  required.
+- **Unexpected results for a wide-ranging track:** run the study with
+  **LONG_RANGE**. Use **LOCAL** only for a study known to be local.
+- **No `tiffs.zip`:** enable **Keep GeoTIFF files**. The intermediate files are
+  intentionally deleted when this setting is disabled.
 
-### Null or error handling
-*Please indicate for each setting as well as the input data which behaviour the App is supposed to show in case of errors or NULL values/input. Please also add notes of possible errors that can happen if settings/parameters are improperly set and any other important information that you find the user should be aware of.*
-
-*Example:* **Setting `radius`:** If no radius AND no duration are given, the input data set is returned with a warning. If no radius is given (NULL), but a duration is defined then a default radius of 1000m = 1km is set. 
+Invalid settings, empty collections, invalid geometries, and annotation or
+raster-processing failures stop the App with an error instead of silently
+returning partially annotated tracks.

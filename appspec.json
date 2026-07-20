@@ -2,30 +2,35 @@
   "version": "1.2",
   "settings": [
     {
-      "id": "app-name",
-      "name": "App Name",
-      "description": "You can personalize the app name.",
-      "default": "Python SDK",
-      "type": "STRING"
+      "id": "range_type",
+      "name": "Study range type",
+      "description": "Use LONG_RANGE for bird, marine, migratory, cross-UTM-zone, or uncertain study extents. It uses packaged Natural Earth land polygons and annotates Land (10) or Water (80). Use LOCAL only for a study known to be spatially local. It fetches detailed ESA WorldCover data through the Microsoft Planetary Computer: 10 Tree cover, 20 Shrubland, 30 Grassland, 40 Cropland, 50 Built-up, 60 Bare / sparse vegetation, 70 Snow and ice, 80 Permanent water bodies, 90 Herbaceous wetland, 95 Mangroves, 100 Moss and lichen.",
+      "defaultValue": "long_range",
+      "type": "RADIOBUTTONS",
+      "options": [
+        {
+          "value": "long_range",
+          "displayText": "LONG_RANGE"
+        },
+        {
+          "value": "local",
+          "displayText": "LOCAL"
+        }
+      ]
     },
     {
-      "id": "year",
-      "name": "The year",
-      "description": "Enter the year for which you want to keep the data",
-      "defaultValue": 1960,
-      "type": "INTEGER"
+      "id": "addUtm",
+      "name": "Add UTM conversion",
+      "description": "Whether to add per-animal UTM conversion. If checked, columns 'utm_x' and 'utm_y' are added per animal with their respective UTM codes",
+      "defaultValue": true,
+      "type": "CHECKBOX"
     },
     {
-      "id": "auxiliary-file-a",
-      "name": "Your message",
-      "description": "You can personalize the app by providing a file.",
-      "type": "USER_FILE"
-    }
-  ],
-  "providedAppFiles": [
-    {
-      "settingId": "auxiliary-file-a",
-      "from": "resources/auxiliary/user-files/provided-app-files/auxiliary-file-a/sample.txt"
+      "id": "keepGeoTiffs",
+      "name": "Keep GeoTIFF files",
+      "description": "Provide all per-animal GeoTIFFs in one downloadable tiffs.zip artifact. LOCAL rasters are clipped ESA WorldCover data accessed through Planetary Computer; LONG_RANGE rasters are generated from packaged Natural Earth polygons. All rasters are reprojected to the local WGS 84 UTM zone used for processing.",
+      "defaultValue": false,
+      "type": "CHECKBOX"
     }
   ],
   "license": {
@@ -33,36 +38,25 @@
   },
   "language": "eng",
   "keywords": [
-    "example",
-    "template"
+    "environment",
+    "land cover",
+    "terrain",
+    "ESA WorldCover",
+    "Natural Earth"
   ],
   "people": [
     {
-      "firstName": "Charles",
+      "firstName": "Omar",
       "middleInitials": null,
-      "lastName": "Darwin",
-      "email": "creator@example.com",
+      "lastName": "Chatila",
+      "email": "omar.chatila@tu-dortmund.de",
       "roles": [
         "author",
         "creator"
       ],
-      "orcid": null,
-      "affiliation": null,
+      "orcid": "0009-0000-4265-1037",
+      "affiliation": "TU Dortmund University",
       "affiliationRor": null
-    }
-  ],
-  "funding": [
-    {
-      "name": "funder name",
-      "comment": "grant for App"
-    }
-  ],
-  "references": [
-    {
-      "type": "IsDescribedBy",
-      "note": "Darwin, C. 1900. The creation. Journal XY. 1-2",
-      "url": "https://anylink.xyz"
     }
   ]
 }
-

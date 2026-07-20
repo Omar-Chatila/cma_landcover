@@ -1,4 +1,6 @@
 {
   "app-name": "MoveApps Python SDK",
-  "year": 2014
+  "range_type": "long_range",
+  "addUtm": "true",
+  "keepGeoTiffs": "false"
 }

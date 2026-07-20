@@ -1,135 +1,107 @@
-import unittest
 import os
-from tests.config.definitions import ROOT_DIR
-from app.app import App
-from sdk.moveapps_io import MoveAppsIo
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+from zipfile import ZipFile
+
 import pandas as pd
-import movingpandas as mpd
+
+from app.app import App
+from environmentcma import RangeType
+from sdk.moveapps_io import MoveAppsIo
+from tests.config.definitions import ROOT_DIR
 
 
 class MyTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
-        os.environ['APP_ARTIFACTS_DIR'] = os.path.join(ROOT_DIR, 'tests/resources/output')
         self.sut = App(moveapps_io=MoveAppsIo())
 
-    def test_app_runs(self):
-        # prepare
-        data: mpd.TrajectoryCollection = pd.read_pickle(os.path.join(ROOT_DIR, 'tests/resources/app/input4_LatLon.pickle'))
-        config: dict = {
-            "year": 2014
-        }
+    @staticmethod
+    def _fixture(name):
+        return pd.read_pickle(Path(ROOT_DIR) / "tests" / "resources" / "app" / name)
 
-        # execute
-        self.sut.execute(data=data, config=config)
+    @patch("app.app.annotate_study_pickle")
+    def test_long_range_study_is_annotated_without_an_artifact(self, annotate):
+        data = self._fixture("input4_LatLon.pickle")
+        annotate.return_value = data
 
-    def test_app_config(self):
-        # prepare
-        config = {
-            "year": 2014
-        }
+        with tempfile.TemporaryDirectory() as artifacts_dir:
+            with patch.dict(
+                os.environ, {"APP_ARTIFACTS_DIR": artifacts_dir}, clear=False
+            ):
+                actual = self.sut.execute(
+                    data=data,
+                    config={
+                        "range_type": "long_range",
+                        "addUtm": "false",
+                        "keepGeoTiffs": "false",
+                    },
+                )
 
-        # execute
-        actual = config
+            self.assertIs(actual, data)
+            self.assertEqual([], list(Path(artifacts_dir).iterdir()))
 
-        # verify
-        self.assertEqual(2014, actual["year"])
+        arguments = annotate.call_args.kwargs
+        self.assertIs(arguments["trajectories"], data)
+        self.assertEqual(RangeType.LONG_RANGE, arguments["range_type"])
+        self.assertEqual(1000, arguments["resolution"])
+        self.assertFalse(arguments["add_utm"])
 
-    def test_year_present(self):
-        # prepare input data
-        df = pd.DataFrame([
-            {'timestamp_utc': "2001-06-11 09:00:00", 'coords_x': 1, 'coords_y': 5, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2001-07-12 09:00:00", 'coords_x': 2, 'coords_y': 4, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2002-08-13 09:00:00", 'coords_x': 3, 'coords_y': 3, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2002-09-14 09:00:00", 'coords_x': 4, 'coords_y': 2, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2002-10-15 09:00:00", 'coords_x': 5, 'coords_y': 1, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2000-06-11 09:00:00", 'coords_x': 1, 'coords_y': 5, 'track_id': 'ID_2'},
-            {'timestamp_utc': "2000-07-12 09:00:00", 'coords_x': 2, 'coords_y': 4, 'track_id': 'ID_2'},
-            {'timestamp_utc': "2001-08-13 09:00:00", 'coords_x': 3, 'coords_y': 3, 'track_id': 'ID_2'},
-            {'timestamp_utc': "2001-09-14 09:00:00", 'coords_x': 4, 'coords_y': 2, 'track_id': 'ID_2'},
-            {'timestamp_utc': "2001-10-15 09:00:00", 'coords_x': 5, 'coords_y': 1, 'track_id': 'ID_2'}
-        ])
-        input = mpd.TrajectoryCollection(
-            df,
-            traj_id_col='track_id',
-            t='timestamp_utc',
-            crs='epsg:4326',
-            x='coords_x', y='coords_y'
-        )
+    @patch("app.app.annotate_study_pickle")
+    def test_all_generated_geotiffs_are_zipped(self, annotate):
+        data = self._fixture("input2_LatLon.pickle")
 
-        # prepare configuration
-        config = {
-            "year": 2001
-        }
+        def create_test_outputs(**arguments):
+            landcover_dir = Path(arguments["output_directory"]) / "landcover"
+            nested_dir = landcover_dir / "nested"
+            nested_dir.mkdir(parents=True)
+            (landcover_dir / "animal-a.tif").write_bytes(b"first raster")
+            (nested_dir / "animal-b.tiff").write_bytes(b"second raster")
+            (landcover_dir / "animal-a_1000.txt").write_text(
+                "10 80\n", encoding="utf-8"
+            )
+            return data
 
-        # prepare expected data
-        df_e = pd.DataFrame([
-            {'timestamp_utc': "2001-06-11 09:00:00", 'coords_x': 1, 'coords_y': 5, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2001-07-12 09:00:00", 'coords_x': 2, 'coords_y': 4, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2001-08-13 09:00:00", 'coords_x': 3, 'coords_y': 3, 'track_id': 'ID_2'},
-            {'timestamp_utc': "2001-09-14 09:00:00", 'coords_x': 4, 'coords_y': 2, 'track_id': 'ID_2'},
-            {'timestamp_utc': "2001-10-15 09:00:00", 'coords_x': 5, 'coords_y': 1, 'track_id': 'ID_2'}
-        ])
-        expected = mpd.TrajectoryCollection(
-            df_e,
-            traj_id_col='track_id',
-            t='timestamp_utc',
-            crs='epsg:4326',
-            x='coords_x', y='coords_y'
-        )
+        annotate.side_effect = create_test_outputs
 
-        # execute
-        actual = self.sut.execute(data=input, config=config)
+        with tempfile.TemporaryDirectory() as artifacts_dir:
+            with patch.dict(
+                os.environ, {"APP_ARTIFACTS_DIR": artifacts_dir}, clear=False
+            ):
+                actual = self.sut.execute(
+                    data=data,
+                    config={
+                        "range_type": "local",
+                        "addUtm": "true",
+                        "keepGeoTiffs": "true",
+                    },
+                )
 
-        # verify timestamps
-        self.assertEqual(actual.to_point_gdf().index.strftime("%Y-%m-%d %H:%M:%S").tolist(),expected.to_point_gdf().index.strftime("%Y-%m-%d %H:%M:%S").tolist())
+            archive_path = Path(artifacts_dir) / "tiffs.zip"
+            self.assertTrue(archive_path.is_file())
+            with ZipFile(archive_path) as archive:
+                self.assertEqual(
+                    [
+                        "landcover/animal-a.tif",
+                        "landcover/nested/animal-b.tiff",
+                    ],
+                    archive.namelist(),
+                )
+                self.assertEqual(
+                    b"first raster", archive.read("landcover/animal-a.tif")
+                )
+                self.assertEqual(
+                    b"second raster",
+                    archive.read("landcover/nested/animal-b.tiff"),
+                )
 
-        # verify track ids
-        self.assertEqual(actual.to_point_gdf()[actual.get_traj_id_col()].unique().tolist(), expected.to_point_gdf()[expected.get_traj_id_col()].unique().tolist())
+        self.assertIs(actual, data)
+        arguments = annotate.call_args.kwargs
+        self.assertEqual(RangeType.LOCAL, arguments["range_type"])
+        self.assertTrue(arguments["add_utm"])
 
-    def test_year_not_present(self):
-        # prepare input data
-        df = pd.DataFrame([
-            {'timestamp_utc': "2001-06-11 09:00:00", 'coords_x': 1, 'coords_y': 5, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2001-07-12 09:00:00", 'coords_x': 2, 'coords_y': 4, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2002-08-13 09:00:00", 'coords_x': 3, 'coords_y': 3, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2002-09-14 09:00:00", 'coords_x': 4, 'coords_y': 2, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2002-10-15 09:00:00", 'coords_x': 5, 'coords_y': 1, 'track_id': 'ID_1'},
-            {'timestamp_utc': "2000-06-11 09:00:00", 'coords_x': 1, 'coords_y': 5, 'track_id': 'ID_2'},
-            {'timestamp_utc': "2000-07-12 09:00:00", 'coords_x': 2, 'coords_y': 4, 'track_id': 'ID_2'},
-            {'timestamp_utc': "2001-08-13 09:00:00", 'coords_x': 3, 'coords_y': 3, 'track_id': 'ID_2'},
-            {'timestamp_utc': "2001-09-14 09:00:00", 'coords_x': 4, 'coords_y': 2, 'track_id': 'ID_2'},
-            {'timestamp_utc': "2001-10-15 09:00:00", 'coords_x': 5, 'coords_y': 1, 'track_id': 'ID_2'}
-        ])
-        input = mpd.TrajectoryCollection(
-            df,
-            traj_id_col='track_id',
-            t='timestamp_utc',
-            crs='epsg:4326',
-            x='coords_x', y='coords_y'
-        )
 
-        # prepare configuration
-        config = {
-            "year": 2100
-        }
-
-        # execute
-        actual = self.sut.execute(data=input, config=config)
-
-        # verify
-        self.assertIsNone(actual)
-
-    """
-    # Use this test if the App should return the input data
-    def test_app_returns_input(self):
-        # prepare
-        expected: mpd.TrajectoryCollection = pd.read_pickle(os.path.join(ROOT_DIR, 'tests/resources/app/input2_LatLon.pickle'))
-        config: dict = {}
-
-        # execute
-        actual = self.sut.execute(data=expected, config=config)
-
-        # verif
-        self.assertEqual(expected, actual)
-    """
+if __name__ == "__main__":
+    unittest.main()

@@ -1,5 +1,16 @@
 # Changelog SDK
 
+## 2026-07 Environmental annotation App
+
+- annotate each animal trajectory independently with numeric and readable
+  terrain classes
+- support a detailed local mode backed by ESA WorldCover and a long-range mode
+  backed by packaged Natural Earth land polygons (`Land`/`Water`)
+- optionally add per-animal WGS 84 UTM coordinates and CRS information
+- optionally provide all generated per-animal GeoTIFFs as one `tiffs.zip`
+  MoveApps artifact
+- additional environmental annotation features are planned
+
 ## 2025-07 `v2.3.0`
 
 - introduce app-setting-type `SECRET`
