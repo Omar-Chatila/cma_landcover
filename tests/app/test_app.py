@@ -40,7 +40,18 @@ class MyTestCase(unittest.TestCase):
             )
 
     def test_id_dtype_patch_handles_all_available_pickles(self):
-        for pickle_path in sorted(Path(ROOT_DIR).rglob("*.pickle")):
+        fixture_directories = (
+            Path(ROOT_DIR) / "resources" / "samples",
+            Path(ROOT_DIR) / "tests" / "resources" / "app",
+        )
+        pickle_paths = sorted(
+            pickle_path
+            for directory in fixture_directories
+            for pickle_path in directory.glob("*.pickle")
+        )
+        self.assertTrue(pickle_paths, "No trajectory pickle fixtures found")
+
+        for pickle_path in pickle_paths:
             with self.subTest(pickle=pickle_path.name):
                 original = pd.read_pickle(pickle_path)
                 original_gdf = original.to_point_gdf()
