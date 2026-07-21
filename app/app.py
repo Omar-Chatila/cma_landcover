@@ -5,6 +5,13 @@ import tempfile
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from environmentcma import annotate_study_pickle, RangeType
+from app.move_apps_patch import (
+    apply_moveapps_id_dtype_patch,
+    restore_original_dtypes_inplace,
+)
+
+
+apply_moveapps_id_dtype_patch()
 
 
 class App(object):
@@ -43,4 +50,6 @@ class App(object):
                             arcname=geotiff.relative_to(output_directory),
                         )
 
+
+            restore_original_dtypes_inplace(data, annotated_tcol)
             return annotated_tcol
